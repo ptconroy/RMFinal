@@ -1,0 +1,85 @@
+---
+title: "Effect of Automatic vs. Standard Transmission on Fuel Economy"
+output: pdf_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Overview
+
+This document address whether there is a difference in fuel economy between an automatic and a standard (manual) transmission. It also attempts to quantify the expected difference, if any, from the choice of transmissions.
+
+### Executive summary
+
+Fill in.
+
+### Introduction
+
+This paper uses data extracted the 1974 Motor Trend US magazine, comprising fuel consumption and 10 aspects of automobile design and performance for 32 automobiles (1973–74 models). This data is known as the "mtcars" dataset included with R. A first look at the data suggests that standard (also known as manual) transmissions provide better fuel economy than automatic transmissions. Figures 1 and 2 show the MPG of the tested cars for all automatic and standart transmissions.
+
+```{r explore}
+library(ggplot2); library(GGally); library(dplyr)
+data("mtcars")
+# set the am variable (which has 0 for automatic and 1 for manual) to better factor names
+mut <- mutate(mtcars, Transmission = as.factor(ifelse(am, "Standard", "Automatic")))
+gp <- ggplot(data = mut, aes(y = mpg, x = Transmission, fill = Transmission))
+gviol <- gp + geom_violin(color = "black", size = 2)
+gviol
+group_by(mut, Transmission) %>% summarise(MPG = mean(mpg))
+```
+
+However, simply taking the mean of the mpg for the two types does not tell the whole story, as there are likely confounding variables that contribute to mpg. To explore which variables might have the largest effect, we do a pairs plot.
+
+```{r pairsplot, cache=TRUE}
+pp <- ggpairs(mtcars, lower = list(continuous = "smooth"))
+pp
+```
+
+The pairs plot shows a strong negative corellation between car weight (variable wt) and mpg, and between engine displacement and mpg. 
+
+```{r wtdisp}
+gwt <- ggplot(data = mut, aes(y=mpg, x = wt, color = Transmission)) + geom_point()
+gdisp <- ggplot(data = mut, aes(y=mpg, x = disp, color = Transmission)) + geom_point()
+gwt
+gdisp
+```
+
+We notice from both graphs, not only the negative correlation between both displacement and weight vs. mpg, but we also notice that heavy, high displacement cars are associated with automatic transmissions.
+
+### Choosing the regressors
+
+We now fit a series of nested models, checking our additional terms with ANOVA to see whether they improve the model.
+
+```{r fits}
+fit0 <- lm(mpg ~ Transmission, data=mut)
+fit1 <- lm(mpg ~ Transmission + wt, data=mut)
+fit2 <- lm(mpg ~ Transmission + wt + disp, data=mut)
+fit3 <- lm(mpg ~ Transmission + wt * disp, data=mut)
+fit4 <- lm(mpg ~ Transmission + disp, data=mut)
+anova(fit0,fit1,fit2)
+anova(fit0,fit4,fit2)
+anova(fit0,fit2,fit3)
+```
+Adding terms for weight and displacement improve the model over a model having only Trasmission type as a regressor. Further, the model treating weight and displacement as interacting variables (rather than confounding), provides a better result and makes sense; high displacement engines have more mass, thus making their vehicle heavier.
+
+Adding terms for the number of gears, horsepower and the rear axle ratio do not improve the model.
+
+### Residuals
+
+The residuals should be normally distributed about zero. Plotting the residuals shows no obvious pattern. A histogram of the residuals shows a more-or-less centered distribution denser near zero than the tails. Additionally, a Shapiro-Wilk test shows that we cannot reject the null hypothesis of normality (p-value = 0.101). In short, the residual distribution appears to be consistent with what we would expect in a linear regression model.
+
+```{r residuals}
+plot(fit3$residuals)
+hist(fit3$residuals)
+shapiro.test(fit3$residuals)
+```
+
+## Normality
+
+The shape of the histogram above is certainly similar to that of a normal distribution. To determine whether the distribution of the means approximates a normal distribution, I'll first run a Shapiro-Wilk normality test. In Shapiro-Wilk, the null hypothesis is normality, so a p value smaller than alpha rejects the null, i.e, the distribution is not normal. 
+
+## Conclusion
+
+Whether automatic or manual transmissions provide differing fuel economy is unanswerable, at least with the mtcars data. While the mean mpg of cars with standard transmissions is higher than that of cars with automatics, our regression model shows no statistically significant non-zero coefficient for the term representing transmission type. This appears to be because the vehicles in the mtcars data set tend to be either heavy cars with automatics, or light cars with shift-sticks. Holding vehicle weight and engine displacement constant, we cannot reject the null hypothesis that there is no difference in fuel economy based upon transmission type.
